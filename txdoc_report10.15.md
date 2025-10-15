@@ -297,6 +297,8 @@ From the pre-extension table in `./images/3.png`, fusion is **not consistently s
 - **Pretraining on Intensity** lets the network first master robust crack appearance cues; **subsequent fusion** then adds geometry without destabilizing the learned features.
 
 **Figures to include.**
-- `Figure 3 (./images/3.png)`: Gong’s pre-extension table comparing Intensity, Range, and Fusion on JCP (shows fusion is not strictly superior to Intensity-only).
+-  Gong’s pre-extension table comparing Intensity, Range, and Fusion on JCP (shows fusion is not strictly superior to Intensity-only).
+-  ![TxDOT sample](./images/3.png)
+-  ![TxDOT sample](./images/4.png)
 
 
