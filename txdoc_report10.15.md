@@ -298,7 +298,58 @@ From the pre-extension table in `./images/3.png`, fusion is **not consistently s
 
 **Figures to include.**
 -  Gong’s pre-extension table comparing Intensity, Range, and Fusion on JCP (shows fusion is not strictly superior to Intensity-only).
--  ![TxDOT sample](./images/3.png)
--  ![TxDOT sample](./images/4.png)
+   ![TxDOT sample](./images/3.png)
+   ![TxDOT sample](./images/4.png)
 
+### 4.4 Data Augmentation — what (likely) went wrong & a modality-aware plan
+
+**Background.** Earlier on ACP I focused augmentation on the two rare classes **Block (50)** and **Pothole (31)**. I sampled *one augmentation at random per sample* from a pool including:
+- **Geometric**: horizontal/vertical flip, random rotate (±10–15°), scale (0.8–1.2), translate (±5–10%), shear/affine, perspective.
+- **Photometric**: brightness/contrast/gamma, histogram equalization/CLAHE, Gaussian noise, Gaussian blur, sharpen.
+- **Cut/compose**: Cutout, Copy-Paste (class-aware, instance masks), Mosaic/MixUp (Ultralytics).
+- **Color/space**: HSV jitter, channel shuffle (when using 3-ch composites).
+
+**Observation.** Despite oversampling and the above augments, **overall mAP went down** (and *Block/Pothole* did not improve).  
+**Hypothesis.** ACP uses **Intensity + Range fusion** (Ch1=Intensity, Ch2=Range, Ch3=const-128). Some transforms are **modality-specific**:
+- Certain **photometric** ops (brightness/contrast/CLAHE/gamma) make sense for **Intensity**, but **damage Range** statistics when applied blindly.
+- Some **geometric** ops (e.g., perspective) must be applied **identically** to both channels; otherwise the pair becomes **misaligned**.
+- Depth-like **Range** may prefer **additive noise** or **small smoothing** but not histogram warping.
+
+Hence, applying augments to the fused image may **help one modality while harming the other**, yielding a net decline.
+
+**Plan going forward.**
+1) **Stage-wise training**:  
+   (a) **Pretrain on Intensity-only**, with **Intensity-safe** augments (geom + photometric).  
+   (b) **Then fuse** and continue on **Intensity+Range**, with **modality-safe** augments: apply *only geometric* transforms jointly to both channels; **disable** photometric transforms on Range.
+2) **Range-only pretrain (optional)** using **Range-safe** augments (geom, light Gaussian noise/blur), then fuse.
+3) **Rare-class aug**: keep **Copy-Paste** for Block/Pothole but ensure pasted crops carry **both modalities** (Intensity+Range) and maintain **geometric consistency**.
+
+---
+
+#### 4.4.a 2025-10-14: **Range-only** model (trained from scratch on ACP-Range)
+
+| Class               | Images | Instances | P     | R     | mAP50 | mAP50-95 |
+|---------------------|-------:|----------:|:-----:|:-----:|:-----:|:--------:|
+| all                 |  1039  |     2043  | 0.733 | 0.660 | 0.733 |  0.362   |
+| Transverse          |  1039  |      222  | 0.759 | 0.693 | 0.762 |  0.301   |
+| Joint               |  1039  |       84  | 0.784 | 0.786 | 0.868 |  0.278   |
+| Sealed_transverse   |  1039  |      327  | 0.806 | 0.662 | 0.758 |  0.325   |
+| Longitudinal        |  1039  |      306  | 0.646 | 0.674 | 0.708 |  0.356   |
+| Lane_longitudinal   |  1039  |      251  | 0.761 | 0.761 | 0.845 |  0.452   |
+| Sealed_longitudinal |  1039  |      629  | 0.755 | 0.607 | 0.729 |  0.353   |
+| Block               |  1039  |       50  | 0.647 | 0.720 | 0.775 |  0.583   |
+| Alligator           |  1039  |      143  | 0.791 | 0.678 | 0.776 |  0.440   |
+| Pothole             |  1039  |       31  | 0.650 | 0.300 | 0.373 |  0.172   |
+
+- **2025-10-15**: Started **stage-2** — fine-tuning from this **Range-only `best.pt`** on the **fused** dataset (Intensity+Range). *Training in progress.*
+
+**Expectation.** If the **Intensity-only (or Range-only) pretrain → fused fine-tune** hypothesis is right, we should see:
+- ↑ mAP on **Block/Pothole** (rare classes) without hurting major classes.
+- ↑ Overall mAP vs. training on fusion from scratch.
+- Smaller PR-AUC gap between Intensity-dominant vs. Range-dominant categories.
+
+**Next checks.**
+- Ablate **photometric-on-Range = OFF** vs. ON.
+- Ensure **paired geometric transforms** (same parameters) are applied to both modalities when fusing.
+- Verify **Copy-Paste** carries **aligned** (I,R) patches rather than RGB-only crops.
 
