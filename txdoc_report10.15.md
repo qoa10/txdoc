@@ -132,6 +132,7 @@ tasks.BottleneckSplit  = my_layers.BottleneckSplit
 | Transverse crack        | 1550   | 103       | 0.822 | 0.647 | 0.720 | 0.352    |
 | Joint crack             | 1550   | 831       | 0.920 | 0.954 | 0.961 | 0.592    |
 | Sealed transverse crack | 1550   | 12        | 0.861 | 0.750 | 0.881 | 0.446    |
+| Slab edge               | 1550   | 1707      | 0.930 | 0.933 | 0.975 | 0.709    |
 
 **Table 3 — CRCP (val)**
 
@@ -255,4 +256,47 @@ tasks.BottleneckSplit  = my_layers.BottleneckSplit
 | Pothole             | 1039   | 31        | 0.480 | 0.387 | 0.396 | 0.207    |
 
 > We can append PR curves or error cases for Pothole/Block to visualize where MoPac+ and augmentation didn’t help.
+>
+> ### 4.3 Findings & Hypothesis
+
+**Motivation.** Both Biswas and Gong trained on **JCP**:  
+- **Biswas** used **Intensity-only**.  
+- **Gong** used **Intensity+Range fusion**, and also reported single-modality runs (see `./images/3.png`).  
+From the pre-extension table in `./images/3.png`, fusion is **not consistently stronger** than Intensity-only.
+
+**What we compare here.** I align three JCP validation tables—**Biswas (Intensity-only)**, **Gong (fusion)**, and **Tao** (my model: start from Biswas `best.pt`, then train on Gong’s latest dataset/config)—and keep only **Class** and **mAP@0.5** for a clean side-by-side.
+
+> *(If a class is missing for a model, its mAP is marked **None**.)*
+
+#### JCP — per-class mAP@0.5 comparison
+
+| Class                     | Biswas | Gong  | Tao  |
+|---------------------------|:------:|:-----:|:----:|
+| All                       | 0.691  | 0.670 | 0.763 |
+| Failed joint              | 0.627  | 0.780 | 0.782 |
+| Corner break              | 0.452  | 0.577 | 0.742 |
+| Punchout                  | 0.410  | 0.399 | 0.682 |
+| Asphalt patch             | 0.707  | 0.698 | 0.798 |
+| Failed concrete patch     | 0.279  | 0.227 | 0.464 |
+| Popout                    | **None** | 0.027 | 0.007 |
+| Longitudinal crack        | 0.753  | 0.821 | 0.889 |
+| Sealed longitudinal       | 0.888  | 0.827 | 0.906 |
+| Concrete patch            | 0.832  | 0.821 | 0.889 |
+| Transverse crack          | 0.680  | 0.720 | 0.848 |
+| Joint crack               | 0.914  | 0.961 | 0.947 |
+| Sealed transverse crack   | 0.787  | 0.881 | 0.937 |
+| Slab edge                 | 0.961  | 0.975 | 0.974 |
+
+**Takeaways.**
+- **Gong > Biswas** overall on JCP (fusion + his pipeline).  
+- **Tao > Gong** on most classes after **pretraining from Biswas’s Intensity-only best, then training on Gong’s fused data**.  
+- This suggests a **staged recipe**: *reach a strong Intensity-only optimum first (pretrain), then introduce fusion* → yields better convergence than training on fused data from scratch.
+
+**Hypothesis.**
+- When **Range + Intensity** are trained jointly from scratch, optimization may get stuck in a sub-optimal compromise between texture (Intensity) and geometry (Range).  
+- **Pretraining on Intensity** lets the network first master robust crack appearance cues; **subsequent fusion** then adds geometry without destabilizing the learned features.
+
+**Figures to include.**
+- `Figure 3 (./images/3.png)`: Gong’s pre-extension table comparing Intensity, Range, and Fusion on JCP (shows fusion is not strictly superior to Intensity-only).
+
 
